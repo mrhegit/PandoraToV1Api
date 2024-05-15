@@ -44,7 +44,7 @@ UPLOAD_BASE_URL = CONFIG.get('backend_container_url', '')
 KEY_FOR_GPTS_INFO = CONFIG.get('key_for_gpts_info', '')
 API_PREFIX = CONFIG.get('backend_container_api_prefix', '')
 GPT_4_S_New_Names = CONFIG.get('gpt_4_s_new_name', 'gpt-4-s').split(',')
-GPT_4_MOBILE_NEW_NAMES = CONFIG.get('gpt_4_mobile_new_name', 'gpt-4-mobile').split(',')
+GPT_4_MOBILE_NEW_NAMES = CONFIG.get('gpt_4_mobile_new_name', 'gpt-4o').split(',')
 GPT_3_5_NEW_NAMES = CONFIG.get('gpt_3_5_new_name', 'gpt-3.5-turbo').split(',')
 
 BOT_MODE = CONFIG.get('bot_mode', {})
@@ -292,7 +292,7 @@ with app.app_context():
     for name in GPT_4_MOBILE_NEW_NAMES:
         gpts_configurations.append({
             "name": name.strip(),
-            "ori_name": "gpt-4-mobile"
+            "ori_name": "gpt-4o"
         })
     for name in GPT_3_5_NEW_NAMES:
         gpts_configurations.append({
@@ -693,13 +693,13 @@ def send_text_prompt_and_get_response(messages, api_key, stream, model):
                 "history_and_training_disabled": False,
                 "conversation_mode":{"kind":"primary_assistant"},"force_paragen":False,"force_rate_limit":False
             }
-        elif ori_model_name == 'gpt-4-mobile':
+        elif ori_model_name == 'gpt-4o':
             payload = {
                 # 构建 payload
                 "action": "next",
                 "messages": formatted_messages,
                 "parent_message_id": str(uuid.uuid4()),
-                "model":"gpt-4-mobile",
+                "model":"gpt-4o",
                 "timezone_offset_min": -480,
                 "suggestions":["Give me 3 ideas about how to plan good New Years resolutions. Give me some that are personal, family, and professionally-oriented.","Write a text asking a friend to be my plus-one at a wedding next month. I want to keep it super short and casual, and offer an out.","Design a database schema for an online merch store.","Compare Gen Z and Millennial marketing strategies for sunglasses."],
                 "history_and_training_disabled": False,
