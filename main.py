@@ -1013,7 +1013,8 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                             citations = metadata.get("citations", [])
                         except:
                             pass
-                        name = message.get("author", {}).get("name")
+                        # name = message.get("author", {}).get("name")
+                        name = message.get("recipient", "")
                         if (role == "user" or message_status == "finished_successfully" or role == "system") and role != "tool":
                             # 如果是用户发来的消息，直接舍弃
                             continue
