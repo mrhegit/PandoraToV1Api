@@ -168,7 +168,7 @@ def generate_gpts_payload(model, messages):
     if model_config:
         gizmo_info = model_config['config']
         gizmo_id = gizmo_info['gizmo']['id']
-        
+
         payload = {
             "action": "next",
             "messages": messages,
@@ -246,8 +246,8 @@ with app.app_context():
             logger.info("backend_container_url 未设置，将使用 oaiusercontent.com 作为图片域名")
         else:
             logger.warning("backend_container_url 未设置，图片生成功能将无法正常使用")
-    
-            
+
+
     else:
         logger.info(f"backend_container_url: {UPLOAD_BASE_URL}")
 
@@ -266,7 +266,7 @@ with app.app_context():
         logger.info(f'绘图接口 URI: /{API_PREFIX}/v1/images/generations')
 
     logger.info(f"need_delete_conversation_after_response: {NEED_DELETE_CONVERSATION_AFTER_RESPONSE}")
-    
+
     logger.info(f"use_oaiusercontent_url: {USE_OAIUSERCONTENT_URL}")
 
     logger.info(f"use_pandora_file_server: False")
@@ -280,7 +280,7 @@ with app.app_context():
 
     logger.info(f"==========================================")
 
-    
+
 
     # 更新 gpts_configurations 列表，支持多个映射
     gpts_configurations = []
@@ -334,7 +334,7 @@ def get_token():
 
         full_url = f"{url}/api/arkose/token"
         payload = {'type': 'gpt-4'}
-        
+
         try:
             response = requests.post(full_url, data=payload)
             if response.status_code == 200:
@@ -361,14 +361,14 @@ def get_image_dimensions(file_content):
 
 def determine_file_use_case(mime_type):
     multimodal_types = ["image/jpeg", "image/webp", "image/png", "image/gif"]
-    my_files_types = ["text/x-php", "application/msword", "text/x-c", "text/html", 
+    my_files_types = ["text/x-php", "application/msword", "text/x-c", "text/html",
                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                      "application/json", "text/javascript", "application/pdf", 
+                      "application/json", "text/javascript", "application/pdf",
                       "text/x-java", "text/x-tex", "text/x-typescript", "text/x-sh",
                       "text/x-csharp", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                      "text/x-c++", "application/x-latext", "text/markdown", "text/plain", 
+                      "text/x-c++", "application/x-latext", "text/markdown", "text/plain",
                       "text/x-ruby", "text/x-script.python"]
-    
+
     if mime_type in multimodal_types:
         return "multimodal"
     elif mime_type in my_files_types:
@@ -398,7 +398,7 @@ def upload_file(file_content, mime_type, api_key):
     file_name = f"{sha256_hash}{file_extension}"
     logger.debug(f"文件名: {file_name}")
 
-    
+
 
     logger.debug(f"Use Case: {determine_file_use_case(mime_type)}")
 
@@ -658,7 +658,7 @@ def send_text_prompt_and_get_response(messages, api_key, stream, model):
             }
             formatted_messages.append(formatted_message)
             logger.critical(f"formatted_message: {formatted_message}")
-            
+
         else:
             # 处理单个文本消息的情况
             formatted_message = {
@@ -802,7 +802,7 @@ def is_valid_citation_format(text):
         return True
 
     # 完整且合法的引用格式
-    
+
     if re.fullmatch(r'\u3010\d+\u2020(source|\u6765\u6e90)\u3011', text):
         return True
 
@@ -926,10 +926,10 @@ def replace_sandbox(text, conversation_id, message_id, api_key):
     def timestamp_filename(filename):
         # 在文件名前加上当前时间戳
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        
+
         # 解码URL编码的filename
         decoded_filename = unquote(filename)
-        
+
         return f"{timestamp}_{decoded_filename}"
 
     def download_file(download_url, filename):
@@ -960,6 +960,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
     last_full_code = ""
     last_full_code_result = ""
     last_content_type = None  # 用于记录上一个消息的内容类型
+    last_recipient = None  # 用于记录上一个消息的接收者
     conversation_id = ''
     citation_buffer = ""
     citation_accumulating = False
@@ -1003,8 +1004,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                         content = message.get("content", {})
                         role = message.get("author", {}).get("role")
                         content_type = content.get("content_type")
-                        if message.get("recipient", "") == "dalle.text2im":
-                            content_type = "code"
+                        recipient = message.get("recipient")
                         print(f"content_type: {content_type}")
                         print(f"last_content_type: {last_content_type}")
 
@@ -1015,8 +1015,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                             citations = metadata.get("citations", [])
                         except:
                             pass
-                        # name = message.get("author", {}).get("name")
-                        name = message.get("recipient", "")
+                        name = message.get("author", {}).get("name")
                         if (role == "user" or message_status == "finished_successfully" or role == "system") and role != "tool":
                             # 如果是用户发来的消息，直接舍弃
                             continue
@@ -1081,18 +1080,27 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                                 new_text = new_text
                                             else:
                                                 new_text = "\n```\n" + new_text
-                                            
+                                        elif last_recipient == "dalle.text2im":
+                                            if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
+                                                new_text = new_text
+                                            else:
+                                                new_text = "\n```\n" + new_text
+
                                         logger.debug(f"new_text: {new_text}")
                                         is_img_message = True
                                     else:
                                         logger.error(f"获取图片下载链接失败: {image_response.text}")
                             except:
                                 pass
-                                    
+
 
                         if is_img_message == False:
                             # print(f"data_json: {data_json}")
                             if content_type == "multimodal_text" and last_content_type == "code":
+                                new_text = "\n```\n" + content.get("text", "")
+                                if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
+                                    new_text = content.get("text", "")
+                            elif content_type == "multimodal_text" and last_recipient == "dalle.text2im":
                                 new_text = "\n```\n" + content.get("text", "")
                                 if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
                                     new_text = content.get("text", "")
@@ -1109,7 +1117,17 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                 last_full_code = full_code  # 更新完整代码以备下次比较
                                 if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
                                     new_text = ""
-                                
+
+                            elif recipient == "dalle.text2im" and last_recipient != "dalle.text2im" and recipient != None:
+                                full_code = ''.join(content.get("text", ""))
+                                new_text = "\n```\n" + full_code[len(last_full_code):]
+                                # print(f"full_code: {full_code}")
+                                # print(f"last_full_code: {last_full_code}")
+                                # print(f"new_text: {new_text}")
+                                last_full_code = full_code  # 更新完整代码以备下次比较
+                                if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
+                                    new_text = ""
+
                             elif last_content_type == "code" and content_type != "code" and content_type != None:
                                 full_code = ''.join(content.get("text", ""))
                                 new_text = "\n```\n" + full_code[len(last_full_code):]
@@ -1129,7 +1147,17 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                 last_full_code = full_code  # 更新完整代码以备下次比较
                                 if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
                                     new_text = ""
-                                
+
+                            elif recipient == "dalle.text2im" and last_recipient == "dalle.text2im" and recipient != None:
+                                full_code = ''.join(content.get("text", ""))
+                                new_text = full_code[len(last_full_code):]
+                                # print(f"full_code: {full_code}")
+                                # print(f"last_full_code: {last_full_code}")
+                                # print(f"new_text: {new_text}")
+                                last_full_code = full_code  # 更新完整代码以备下次比较
+                                if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
+                                    new_text = ""
+
                             else:
                                 # 只获取新的 parts
                                 parts = content.get("parts", [])
@@ -1154,7 +1182,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                             replaced_text, remaining_text, is_potential_citation = replace_complete_citation(citation_buffer, citations)
                                             # print(replaced_text)  # 输出替换后的文本
                                             new_text = replaced_text
-                                            
+
                                             if(is_potential_citation):
                                                 citation_buffer = remaining_text
                                             else:
@@ -1229,7 +1257,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                         logger.debug(f"BOT_MODE_ENABLED_PLAIN_IMAGE_URL_OUTPUT: {BOT_MODE_ENABLED_PLAIN_IMAGE_URL_OUTPUT}")
                                         new_text = tmp_new_text + f"图片链接：{execution_output_image_url_buffer}\n"
                                     execution_output_image_url_buffer = ""
-                                
+
                                 if content_type == "code":
                                     new_text =  new_text + "\n```\n"
                                 # print(f"full_code_result: {full_code_result}")
@@ -1248,7 +1276,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                 last_full_code_result = full_code_result
 
                             # 其余Action执行输出特殊处理
-                            if role == "tool" and name != "python" and name != "dalle.text2im" and last_content_type != "execution_output" and content_type != None:                     
+                            if role == "tool" and name != "python" and name != "dalle.text2im" and last_content_type != "execution_output" and content_type != None:
                                 new_text = ""
                                 if last_content_type == "code":
                                     if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
@@ -1283,7 +1311,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                                     logger.debug(f"download_url: {download_url}")
                                                     if USE_OAIUSERCONTENT_URL == True:
                                                         execution_output_image_url_buffer = download_url
-                                                        
+
                                                     else:
                                                         # 从URL下载图片
                                                         # image_data = requests.get(download_url).content
@@ -1294,7 +1322,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                                             image_data = image_download_response.content
                                                             today_image_url = save_image(image_data)  # 保存图片，并获取文件名
                                                             execution_output_image_url_buffer = f"{UPLOAD_BASE_URL}/{today_image_url}"
-                                                            
+
                                                         else:
                                                             logger.error(f"下载图片失败: {image_download_response.text}")
 
@@ -1311,6 +1339,10 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                         # 更新 last_content_type
                         if content_type != None:
                             last_content_type = content_type if role != "user" else last_content_type
+
+                        # 更新 last_recipient
+                        if recipient != None:
+                            last_recipient = recipient
 
                         model_slug = message.get("metadata", {}).get("model_slug") or model
 
@@ -1402,20 +1434,20 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                 logger.info(f"最后的缓存数据: {buffer_json}")
                 error_message = buffer_json.get("detail", {}).get("message", "未知错误")
                 error_data = {
-                            "id": chat_message_id,
-                            "object": "chat.completion.chunk",
-                            "created": timestamp,
-                            "model": "error",
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {
-                                        "content": ''.join("```\n" + error_message + "\n```")
-                                    },
-                                    "finish_reason": None
-                                }
-                            ]
+                    "id": chat_message_id,
+                    "object": "chat.completion.chunk",
+                    "created": timestamp,
+                    "model": "error",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": ''.join("```\n" + error_message + "\n```")
+                            },
+                            "finish_reason": None
                         }
+                    ]
+                }
                 tmp = 'data: ' + json.dumps(error_data) + '\n\n'
                 logger.info(f"发送最后的数据: {tmp}")
                 # 累积 new_text
@@ -1433,20 +1465,20 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                 # print("JSON 解析错误")
                 logger.info(f"发送最后的数据: {buffer}")
                 error_data = {
-                            "id": chat_message_id,
-                            "object": "chat.completion.chunk",
-                            "created": timestamp,
-                            "model": "error",
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {
-                                        "content": ''.join("```\n" + buffer + "\n```")
-                                    },
-                                    "finish_reason": None
-                                }
-                            ]
+                    "id": chat_message_id,
+                    "object": "chat.completion.chunk",
+                    "created": timestamp,
+                    "model": "error",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": ''.join("```\n" + buffer + "\n```")
+                            },
+                            "finish_reason": None
                         }
+                    ]
+                }
                 tmp = 'data: ' + json.dumps(error_data) + '\n\n'
                 q_data =  tmp
                 data_queue.put(q_data)
@@ -1552,7 +1584,7 @@ def chat_completions():
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({"error": "Authorization header is missing or invalid"}), 401
-    api_key = auth_header.split(' ')[1] 
+    api_key = auth_header.split(' ')[1]
     logger.info(f"api_key: {api_key}")
 
 
@@ -1629,7 +1661,7 @@ def chat_completions():
             # if conversation_id:
             #     # print(f"准备删除的会话id： {conversation_id}")
             #     delete_conversation(conversation_id, api_key)     
-            
+
 
     if not stream:
         # 执行流式响应的生成函数来累积 all_new_text
@@ -1669,7 +1701,7 @@ def chat_completions():
 
         # 返回 JSON 响应
         return jsonify(response_json)
-    else:            
+    else:
         return Response(generate(), mimetype='text/event-stream')
 
 
@@ -1683,7 +1715,7 @@ def images_generations():
     accessible_model_list = get_accessible_model_list()
     if model not in accessible_model_list:
         return jsonify({"error": "model is not accessible"}), 401
-    
+
     prompt = data.get('prompt', '')
 
     prompt = DALLE_PROMPT_PREFIX + prompt
@@ -1696,7 +1728,7 @@ def images_generations():
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({"error": "Authorization header is missing or invalid"}), 401
-    api_key = auth_header.split(' ')[1] 
+    api_key = auth_header.split(' ')[1]
     logger.info(f"api_key: {api_key}")
 
     image_urls = []
@@ -1843,7 +1875,7 @@ def images_generations():
                                         logger.error(f"获取图片下载链接失败: {image_response.text}")
                             except:
                                 pass
-                                    
+
 
                         if is_img_message == False:
                             # print(f"data_json: {data_json}")
@@ -1860,7 +1892,7 @@ def images_generations():
                                 # print(f"last_full_code: {last_full_code}")
                                 # print(f"new_text: {new_text}")
                                 last_full_code = full_code  # 更新完整代码以备下次比较
-                                
+
                             elif last_content_type == "code" and content_type != "code" and content_type != None:
                                 full_code = ''.join(content.get("text", ""))
                                 new_text = "\n```\n" + full_code[len(last_full_code):]
@@ -1876,7 +1908,7 @@ def images_generations():
                                 # print(f"last_full_code: {last_full_code}")
                                 # print(f"new_text: {new_text}")
                                 last_full_code = full_code  # 更新完整代码以备下次比较
-                                
+
                             else:
                                 # 只获取新的 parts
                                 parts = content.get("parts", [])
@@ -1900,7 +1932,7 @@ def images_generations():
                                             replaced_text, remaining_text, is_potential_citation = replace_complete_citation(citation_buffer, citations)
                                             # print(replaced_text)  # 输出替换后的文本
                                             new_text = replaced_text
-                                            
+
                                             if(is_potential_citation):
                                                 citation_buffer = remaining_text
                                             else:
@@ -1919,7 +1951,7 @@ def images_generations():
 
                             # Python 工具执行输出特殊处理
                             if role == "tool" and name == "python" and last_content_type != "execution_output" and content_type != None:
-                                
+
 
                                 full_code_result = ''.join(content.get("text", ""))
                                 new_text = "`Result:` \n```\n" + full_code_result[len(last_full_code_result):]
@@ -1956,7 +1988,7 @@ def images_generations():
                         if content_type != None:
                             last_content_type = content_type if role != "user" else last_content_type
 
-                        
+
                         new_data = {
                             "id": chat_message_id,
                             "object": "chat.completion.chunk",
@@ -2013,20 +2045,20 @@ def images_generations():
                 buffer_json = json.loads(buffer)
                 error_message = buffer_json.get("detail", {}).get("message", "未知错误")
                 error_data = {
-                            "id": chat_message_id,
-                            "object": "chat.completion.chunk",
-                            "created": timestamp,
-                            "model": "error",
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {
-                                        "content": ''.join("```\n" + error_message + "\n```")
-                                    },
-                                    "finish_reason": None
-                                }
-                            ]
+                    "id": chat_message_id,
+                    "object": "chat.completion.chunk",
+                    "created": timestamp,
+                    "model": "error",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {
+                                "content": ''.join("```\n" + error_message + "\n```")
+                            },
+                            "finish_reason": None
                         }
+                    ]
+                }
                 tmp = 'data: ' + json.dumps(error_data) + '\n\n'
                 logger.info(f"发送最后的数据: {tmp}")
                 # 累积 new_text
@@ -2038,7 +2070,7 @@ def images_generations():
                 yield buffer
 
         # delete_conversation(conversation_id, api_key)   
-            
+
     # 执行流式响应的生成函数来累积 all_new_text
     # 迭代生成器对象以执行其内部逻辑
     for _ in generate():
