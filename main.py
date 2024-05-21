@@ -1005,6 +1005,8 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                         role = message.get("author", {}).get("role")
                         content_type = content.get("content_type")
                         recipient = message.get("recipient")
+                        if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False and recipient == "dalle.text2im":
+                            content_type = "code"
                         print(f"content_type: {content_type}")
                         print(f"last_content_type: {last_content_type}")
 
