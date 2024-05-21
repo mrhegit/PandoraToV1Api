@@ -1003,6 +1003,8 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                         content = message.get("content", {})
                         role = message.get("author", {}).get("role")
                         content_type = content.get("content_type")
+                        if message.get("recipient", "") == "dalle.text2im":
+                            content_type = "code"
                         print(f"content_type: {content_type}")
                         print(f"last_content_type: {last_content_type}")
 
