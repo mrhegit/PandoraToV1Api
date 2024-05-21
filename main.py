@@ -1118,16 +1118,6 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                 if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
                                     new_text = ""
 
-                            elif recipient == "dalle.text2im" and last_recipient != "dalle.text2im" and recipient != None:
-                                full_code = ''.join(content.get("text", ""))
-                                new_text = "\n```\n" + full_code[len(last_full_code):]
-                                # print(f"full_code: {full_code}")
-                                # print(f"last_full_code: {last_full_code}")
-                                # print(f"new_text: {new_text}")
-                                last_full_code = full_code  # 更新完整代码以备下次比较
-                                if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
-                                    new_text = ""
-
                             elif last_content_type == "code" and content_type != "code" and content_type != None:
                                 full_code = ''.join(content.get("text", ""))
                                 new_text = "\n```\n" + full_code[len(last_full_code):]
@@ -1148,21 +1138,13 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                 if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
                                     new_text = ""
 
-                            elif recipient == "dalle.text2im" and last_recipient == "dalle.text2im" and recipient != None:
-                                full_code = ''.join(content.get("text", ""))
-                                new_text = full_code[len(last_full_code):]
-                                # print(f"full_code: {full_code}")
-                                # print(f"last_full_code: {last_full_code}")
-                                # print(f"new_text: {new_text}")
-                                last_full_code = full_code  # 更新完整代码以备下次比较
-                                if BOT_MODE_ENABLED and BOT_MODE_ENABLED_CODE_BLOCK_OUTPUT == False:
-                                    new_text = ""
-
                             else:
                                 # 只获取新的 parts
                                 parts = content.get("parts", [])
                                 full_text = ''.join(parts)
                                 new_text = full_text[len(last_full_text):]
+                                if recipient == "dalle.text2im" and last_recipient != "dalle.text2im" and recipient != None:
+                                    new_text = "\n```\n" + new_text
                                 if full_text != '':
                                     last_full_text = full_text  # 更新完整文本以备下次比较
                                 if "\u3010" in new_text and not citation_accumulating:
