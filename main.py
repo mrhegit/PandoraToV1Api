@@ -197,9 +197,9 @@ CORS(app, resources={r"/images/*": {"origins": "*"}})
 # PANDORA_UPLOAD_URL = 'files.pandoranext.com'
 
 
-VERSION = '0.6.0'
+VERSION = '0.6.7'
 # VERSION = 'test'
-UPDATE_INFO = '去除PandoraNext相关服务依赖选项，并修改部分配置名，Respect Pandora！'
+UPDATE_INFO = '优化图片的prompt输出'
 # UPDATE_INFO = '【仅供临时测试使用】 '
 
 with app.app_context():
