@@ -24,6 +24,9 @@ from io import BytesIO
 from urllib.parse import urlparse, urlunparse
 import base64
 from fake_useragent import UserAgent
+import os
+from urllib.parse import urlparse
+
 
 # 读取配置文件
 def load_config(file_path):
@@ -149,7 +152,7 @@ def fetch_gizmo_info(base_url, proxy_api_prefix, model_id):
         "Authorization": f"Bearer {KEY_FOR_GPTS_INFO}"
     }
 
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, proxies=proxies)
     # logger.debug(f"fetch_gizmo_info_response: {response.text}")
     if response.status_code == 200:
         return response.json()
@@ -222,13 +225,74 @@ CORS(app, resources={r"/images/*": {"origins": "*"}})
 # PANDORA_UPLOAD_URL = 'files.pandoranext.com'
 
 
-VERSION = '0.6.8'
+VERSION = '0.6.9'
 # VERSION = 'test'
-UPDATE_INFO = '支持缓存GPTS配置'
+UPDATE_INFO = '支持proxy参数'
 # UPDATE_INFO = '【仅供临时测试使用】 '
+
+# 解析响应中的信息
+def parse_oai_ip_info():
+    tmp_ua = ua.random
+    res = requests.get("https://auth0.openai.com/cdn-cgi/trace", headers={"User-Agent":tmp_ua}, proxies=proxies)
+    lines = res.text.strip().split("\n")
+    info_dict = {line.split('=')[0]: line.split('=')[1] for line in lines if '=' in line}
+    return {key: info_dict[key] for key in ["ip", "loc", "colo", "warp"] if key in info_dict}
 
 with app.app_context():
     global gpts_configurations  # 移到作用域的最开始
+
+    global proxies
+    global proxy_type
+    global proxy_host
+    global proxy_port
+
+    # 获取环境变量
+    proxy_url = CONFIG.get('proxy', None)
+
+    logger.info(f"==========================================")
+    if proxy_url and proxy_url != '':
+        parsed_url = urlparse(proxy_url)
+        scheme = parsed_url.scheme
+        hostname = parsed_url.hostname
+        port = parsed_url.port
+
+        # 构建requests支持的代理格式
+        if scheme in ['http']:
+            proxy_address = f"{scheme}://{hostname}:{port}"
+            proxies = {
+                'http': proxy_address,
+                'https': proxy_address,
+            }
+            proxy_type = scheme
+            proxy_host = hostname
+            proxy_port = port
+        elif scheme in ['socks5']:
+            proxy_address = f"{scheme}://{hostname}:{port}"
+            proxies = {
+                'http': proxy_address,
+                'https': proxy_address,
+            }
+            proxy_type = scheme
+            proxy_host = hostname
+            proxy_port = port
+        else:
+            raise ValueError("Unsupport proxy scheme: " + scheme)
+
+        # 打印当前使用的代理设置
+        logger.info(f"Use Proxy: {scheme}://{proxy_host}:{proxy_port}")
+    else:
+        # 如果没有设置代理
+        proxies = {}
+        proxy_type = None
+        http_proxy_host = None
+        http_proxy_port = None
+        logger.info("No Proxy")
+
+    ip_info = parse_oai_ip_info()
+    logger.info(f"The ip you are using to access oai is: {ip_info['ip']}")
+    logger.info(f"The location of this ip is: {ip_info['loc']}")
+    logger.info(f"The colo of this ip is: {ip_info['colo']}")
+    logger.info(f"Is this ip a Warp ip: {ip_info['warp']}")
 
     # 输出版本信息
     logger.info(f"==========================================")
@@ -361,7 +425,7 @@ def get_token():
         payload = {'type': 'gpt-4'}
 
         try:
-            response = requests.post(full_url, data=payload)
+            response = requests.post(full_url, data=payload, proxies=proxies)
             if response.status_code == 200:
                 token = response.json().get('token')
                 # 确保 token 字段存在且不是 None 或空字符串
@@ -441,7 +505,7 @@ def upload_file(file_content, mime_type, api_key):
     headers = {
         "Authorization": f"Bearer {api_key}"
     }
-    upload_response = requests.post(upload_api_url, json=upload_request_payload, headers=headers)
+    upload_response = requests.post(upload_api_url, json=upload_request_payload, headers=headers, proxies=proxies)
     logger.debug(f"upload_response: {upload_response.text}")
     if upload_response.status_code != 200:
         raise Exception("Failed to get upload URL")
@@ -457,7 +521,7 @@ def upload_file(file_content, mime_type, api_key):
         'Content-Type': mime_type,
         'x-ms-blob-type': 'BlockBlob'  # 添加这个头部
     }
-    put_response = requests.put(upload_url, data=file_content, headers=put_headers)
+    put_response = requests.put(upload_url, data=file_content, headers=put_headers, proxies=proxies)
     if put_response.status_code != 201:
         logger.debug(f"put_response: {put_response.text}")
         logger.debug(f"put_response status_code: {put_response.status_code}")
@@ -465,7 +529,7 @@ def upload_file(file_content, mime_type, api_key):
 
     # 第3步：检测上传是否成功并检查响应
     check_url = f"{BASE_URL}{PROXY_API_PREFIX}/backend-api/files/{file_id}/uploaded"
-    check_response = requests.post(check_url, json={}, headers=headers)
+    check_response = requests.post(check_url, json={}, headers=headers, proxies=proxies)
     logger.debug(f"check_response: {check_response.text}")
     if check_response.status_code != 200:
         raise Exception("Failed to check file upload completion")
@@ -500,7 +564,7 @@ def get_file_metadata(file_content, mime_type, api_key):
         headers = {
             "Authorization": f"Bearer {api_key}"
         }
-        check_response = requests.post(check_url, json={}, headers=headers)
+        check_response = requests.post(check_url, json={}, headers=headers, proxies=proxies)
         logger.debug(f"check_response: {check_response.text}")
         if check_response.status_code != 200:
             tag = False
@@ -621,7 +685,7 @@ def send_text_prompt_and_get_response(messages, api_key, stream, model):
                                 tmp_headers = {
                                     'User-Agent': tmp_user_agent
                                 }
-                                file_response = requests.get(url=file_url, headers=tmp_headers)
+                                file_response = requests.get(url=file_url, headers=tmp_headers, proxies=proxies)
                                 file_content = file_response.content
                                 mime_type = file_response.headers.get('Content-Type', '').split(';')[0].strip()
                             except Exception as e:
@@ -756,7 +820,7 @@ def send_text_prompt_and_get_response(messages, api_key, stream, model):
                 token = get_token()
                 payload["arkose_token"] = token
         logger.debug(f"payload: {payload}")
-        response = requests.post(url, headers=headers, json=payload, stream=True)
+        response = requests.post(url, headers=headers, json=payload, stream=True, proxies=proxies)
         # print(response)
         return response
 
@@ -771,7 +835,7 @@ def delete_conversation(conversation_id, api_key):
             "Authorization": f"Bearer {api_key}",
         }
         patch_data = {"is_visible": False}
-        response = requests.patch(patch_url, headers=patch_headers, json=patch_data)
+        response = requests.patch(patch_url, headers=patch_headers, json=patch_data, proxies=proxies)
 
         if response.status_code == 200:
             logger.info(f"删除会话 {conversation_id} 成功")
@@ -923,7 +987,7 @@ def replace_sandbox(text, conversation_id, message_id, api_key):
             "Authorization": f"Bearer {api_key}"
         }
 
-        response = requests.get(sandbox_info_url, headers=headers)
+        response = requests.get(sandbox_info_url, headers=headers, proxies=proxies)
 
         if response.status_code == 200:
             logger.debug(f"获取下载 URL 成功: {response.json()}")
@@ -954,7 +1018,7 @@ def replace_sandbox(text, conversation_id, message_id, api_key):
         if not os.path.exists("./files"):
             os.makedirs("./files")
         file_path = f"./files/{filename}"
-        with requests.get(download_url, stream=True) as r:
+        with requests.get(download_url, stream=True, proxies=proxies) as r:
             with open(file_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
@@ -1062,7 +1126,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                     headers = {
                                         "Authorization": f"Bearer {api_key}"
                                     }
-                                    image_response = requests.get(image_url, headers=headers)
+                                    image_response = requests.get(image_url, headers=headers, proxies=proxies)
 
                                     if image_response.status_code == 200:
                                         download_url = image_response.json().get('download_url')
@@ -1077,8 +1141,8 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                                     new_text = f"图片链接：{download_url}\n"
                                         else:
                                             # 从URL下载图片
-                                            # image_data = requests.get(download_url).content
-                                            image_download_response = requests.get(download_url)
+                                            # image_data = requests.get(download_url, proxies=proxies).content
+                                            image_download_response = requests.get(download_url, proxies=proxies)
                                             # print(f"image_download_response: {image_download_response.text}")
                                             if image_download_response.status_code == 200:
                                                 logger.debug(f"下载图片成功")
@@ -1304,7 +1368,7 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
                                                 headers = {
                                                     "Authorization": f"Bearer {api_key}"
                                                 }
-                                                image_response = requests.get(image_url, headers=headers)
+                                                image_response = requests.get(image_url, headers=headers, proxies=proxies)
 
                                                 if image_response.status_code == 200:
                                                     download_url = image_response.json().get('download_url')
@@ -1314,8 +1378,8 @@ def data_fetcher(upstream_response, data_queue, stop_event, last_data_time, api_
 
                                                     else:
                                                         # 从URL下载图片
-                                                        # image_data = requests.get(download_url).content
-                                                        image_download_response = requests.get(download_url)
+                                                        # image_data = requests.get(download_url, proxies=proxies).content
+                                                        image_download_response = requests.get(download_url, proxies=proxies)
                                                         # print(f"image_download_response: {image_download_response.text}")
                                                         if image_download_response.status_code == 200:
                                                             logger.debug(f"下载图片成功")
@@ -1829,7 +1893,7 @@ def images_generations():
                                     headers = {
                                         "Authorization": f"Bearer {api_key}"
                                     }
-                                    image_response = requests.get(image_url, headers=headers)
+                                    image_response = requests.get(image_url, headers=headers, proxies=proxies)
 
                                     if image_response.status_code == 200:
                                         download_url = image_response.json().get('download_url')
@@ -1842,7 +1906,7 @@ def images_generations():
                                             if response_format == "url":
                                                 # 从URL下载图片
                                                 # image_data = requests.get(download_url).content
-                                                image_download_response = requests.get(download_url)
+                                                image_download_response = requests.get(download_url, proxies=proxies)
                                                 # print(f"image_download_response: {image_download_response.text}")
                                                 if image_download_response.status_code == 200:
                                                     logger.debug(f"下载图片成功")
@@ -1857,7 +1921,7 @@ def images_generations():
                                             else:
                                                 # 使用base64编码图片
                                                 # image_data = requests.get(download_url).content
-                                                image_download_response = requests.get(download_url)
+                                                image_download_response = requests.get(download_url, proxies=proxies)
                                                 if image_download_response.status_code == 200:
                                                     logger.debug(f"下载图片成功")
                                                     image_data = image_download_response.content
